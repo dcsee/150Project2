@@ -8,7 +8,8 @@
 
 void *VMLibraryHandle = NULL;
 
-TVMMainEntry VMLoadModule(const char *module){
+
+{
     
     VMLibraryHandle = dlopen(module, RTLD_NOW);
     if(NULL == VMLibraryHandle){

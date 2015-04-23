@@ -155,18 +155,20 @@ extern "C"{
 		//tickms is the time in milliseconds for the alarm, this will be the quantum. 
 		//machineticksms is the tick time of the machine, how long it will sleep in between actions. This was necessary because ppoll doesn't exist on all systems.
 	
+		//here, create a singleton ThreadStore to hold all the threads
+	
 		//The following 3 lines initialize the machine layer
 		MachineInitialize(machinetickms);	//initialize the machine
 		TMachineAlarmCallback callback = &decrementAlarmCounter;
-		MachineRequestAlarm(tickms, callback, &mytick);		//request an alarm here, for useconds_t after calling the function
-		
-		//here, create a singleton ThreadStore to hold all the threads
-		//add a new thread to the thread store after calling vmloadmodule?
+		MachineRequestAlarm(tickms, callback, &mytick);		//request an alarm here, for useconds_t after calling the function 
 	
 		TVMMainEntry VMMain;	//declare the variable to hold the function pointer to the loaded module's main() function	
 		const char* module = (const char*) argv[0];	//get the module from the command-line args
 		VMMain = VMLoadModule(module);							//load the module using VMLoad, save the VMMain function reference
 
+		//Here, create a new TCB for the current thread, copy all its data in, and add it to the thread store
+		//Next, create a new thread and TCB for the idle thread. Assign it priority 0, and add it to the thread store
+		
 		if(VMMain != NULL){													//if VMMain is a valid reference,
 			VMMain(argc, argv);												//run the loaded module,
 			VMUnloadModule();													//then unload the module

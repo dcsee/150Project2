@@ -26,7 +26,7 @@ typedef struct{
 #define MachineContextSwitch(mcntxold,mcntxnew)    \
     if(setjmp((mcntxold)->DJumpBuffer) == 0) longjmp((mcntxnew)->DJumpBuffer, 1)
 
-// create machine context 
+// create machine context
 void MachineContextCreate(SMachineContextRef mcntxref, void (*entry)(void *), void *param, void *stackaddr, size_t stacksize);
 
 typedef void (*TMachineAlarmCallback)(void *calldata);

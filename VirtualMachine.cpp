@@ -20,6 +20,26 @@ extern "C"{
 	
 	//Dan's Threading Functions
 	
+		TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid){
+		//creates a thread in the virtual machine, thread begins in the dead state VM_THREAD_STATE_DEAD
+		//entry specifies the function of the thread
+		//param specifies the parameter that is passed to the function
+		//memsize specifies the size of the thread's stack
+		//prio specifies the thread's priority
+		//tid specifies at which location to put the thread identifier
+		
+		//also creates a thread control block and pushes it into the appropriate queue in ThreadStore
+		
+		
+		cout << "Entered VMThreadCreate" <<endl;
+		
+		//if the thread was successfully created,
+		return VM_STATUS_SUCCESS;
+		//if entry or tid is NULL, return
+		//return VM_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	
 	TVMStatus VMThreadState(TVMThreadID thread, TVMThreadStateRef state){
 		//retrieves the state of the thread specified by parameter thread, and places that state into the location specified by parameter state
 		//does NOT RETURN the state of the thread. parameter state IS AN ADDRESS. Assigns the thread state BY REFERENCE, eg *state = threadstate
@@ -89,23 +109,7 @@ extern "C"{
 		//if the thread does exist, but it is not in the dead state,
 				//return VM_STATUS_ERROR_INVALID_STATE;
 	}
-	
-	TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid){
-		//creates a thread in the virtual machine, thread begins in the dead state VM_THREAD_STATE_DEAD
-		//entry specifies the function of the thread
-		//param specifies the parameter that is passed to the function
-		//memsize specifies the size of the thread's stack
-		//prio specifies the thread's priority
-		//tid specifies at which location to put the thread identifier
 		
-		cout << "Entered VMThreadCreate" <<endl;
-		
-		//if the thread was successfully created,
-		return VM_STATUS_SUCCESS;
-		//if entry or tid is NULL, return
-		//return VM_STATUS_ERROR_INVALID_PARAMETER;
-	}
-	
 	void clearAlarmCounter(void* data){ 
 		//resets the sleep time to zero
 		useconds_t* mydata = (useconds_t*)data;
@@ -151,13 +155,15 @@ extern "C"{
 		//tickms is the time in milliseconds for the alarm, this will be the quantum. 
 		//machineticksms is the tick time of the machine, how long it will sleep in between actions. This was necessary because ppoll doesn't exist on all systems.
 	
+		//The following 3 lines initialize the machine layer
 		MachineInitialize(machinetickms);	//initialize the machine
 		TMachineAlarmCallback callback = &decrementAlarmCounter;
 		MachineRequestAlarm(tickms, callback, &mytick);		//request an alarm here, for useconds_t after calling the function
+		
+		//here, create a singleton ThreadStore to hold all the threads
 	
 		TVMMainEntry VMMain;	//declare the variable to hold the function pointer to the loaded module's main() function	
 		const char* module = (const char*) argv[0];	//get the module from the command-line args
-
 		VMMain = VMLoadModule(module);							//load the module using VMLoad, save the VMMain function reference
 
 		if(VMMain != NULL){													//if VMMain is a valid reference,

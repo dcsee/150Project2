@@ -20,21 +20,6 @@ extern "C"{
 	
 	//Dan's Threading Functions
 	
-	TVMStatus VMThreadSleep(TVMTick tick){
-		//puts the currently running thread to sleep for a number of ticks specified by parameter tick
-		//if tick is the same as VM_TIMEOUT_IMMEDIATE, 
-			//the current process immediately goes to sleep
-			//the next ready process of EQUAL PRIORITY (NOT greater OR lesser) wakes up and begins executing,
-			//the process that just woke up and started executing gets the remainder of the processing time that the previous thread just gave up
-			
-			//As per nitta's instructions on Piazza:  set up an alarm using MachineRequestAlarm to sleep and wake the thread
-			
-		//if the currently running thread successfully goes to sleep,
-				return VM_STATUS_SUCCESS;
-		//if the sleep duration tick is the same as VM_TIMEOUT_INFINITE,
-		//		return VM_STATUS_ERROR_INVALID_PARAMETER;
-	}
-	
 	TVMStatus VMThreadState(TVMThreadID thread, TVMThreadStateRef state){
 		//retrieves the state of the thread specified by parameter thread, and places that state into the location specified by parameter state
 		//does NOT RETURN the state of the thread. parameter state IS AN ADDRESS. Assigns the thread state BY REFERENCE, eg *state = threadstate
@@ -121,9 +106,54 @@ extern "C"{
 		//return VM_STATUS_ERROR_INVALID_PARAMETER;
 	}
 	
+	void clearAlarmCounter(void* data){ 
+		//resets the sleep time to zero
+		useconds_t* mydata = (useconds_t*)data;
+		*mydata -= 1;	//cast data to a useconds_t pointer and reset it to zero
+//		cout << "This should only appear once" << endl;
+		cout << "decremented alarm counter" << endl;
+		return;
+	}
+	
+	TVMStatus VMThreadSleep(TVMTick tick){
+		//TVMTick is just an unsigned int
+		//MachineRequestAlarm call signature:
+			//void MachineRequestAlarm(useconds_t usec, TMachineAlarmCallback callback, void *calldata);
+			//useconds_t is also an unsigned integer
+			
+	
+	//VMThreadSleep puts the currently running thread to sleep for a number of ticks specified by parameter tick
+	//if tick is the same as VM_TIMEOUT_IMMEDIATE, 
+		//the current process immediately goes to sleep
+		//the next ready process of EQUAL PRIORITY (NOT greater OR lesser) wakes up and begins executing,
+		//the process that just woke up and started executing gets the remainder of the processing time that the previous thread just gave up
+		
+		//what I actually want to call here is change the thread's state to the WAIT state
+		
+		cout << "going to sleep" << endl;	//debug
+		//set the callback function pointer here
+		//		MachineRequestAlarm((useconds_t) tick, callback, &tick);		//request an alarm here, for useconds_t after calling the function
+		for(mytick; mytick > 0;){
+			cout << "This should keep appearing until the alarm goes off" << endl;
+		}//do nothing while the time to sleep is greater than zero
+		cout << "woke back up" << endl;	//debug
+		
+		//As per nitta's instructions on Piazza:  set up an alarm using MachineRequestAlarm to sleep and wake the thread
+		
+	//if the currently running thread successfully goes to sleep,
+			return VM_STATUS_SUCCESS;
+	//if the sleep duration tick is the same as VM_TIMEOUT_INFINITE,
+	//		return VM_STATUS_ERROR_INVALID_PARAMETER;
+}
+	
 	TVMStatus VMStart(int tickms, int machinetickms, int argc, char* argv[]){
 
-		//tickms is the time in milliseconds for the alarm, this will be the quantum. The machineticksms is the tick time of the machine, how long it will sleep in between actions. This was necessary because ppoll doesn't exist on all systems.
+		//tickms is the time in milliseconds for the alarm, this will be the quantum. 
+		//machineticksms is the tick time of the machine, how long it will sleep in between actions. This was necessary because ppoll doesn't exist on all systems.
+	
+		MachineInitialize(machinetickms);	//initialize the machine
+		TMachineAlarmCallback callback = &decrementAlarmCounter;
+		MachineRequestAlarm(tickms, callback, &mytick);		//request an alarm here, for useconds_t after calling the function
 	
 		TVMMainEntry VMMain;	//declare the variable to hold the function pointer to the loaded module's main() function	
 		const char* module = (const char*) argv[0];	//get the module from the command-line args
@@ -134,10 +164,10 @@ extern "C"{
 			VMMain(argc, argv);												//run the loaded module,
 			VMUnloadModule();													//then unload the module
 			cout << "VMMain ran successfully" << endl;
-			ThreadStore* tstore = new ThreadStore();
-			tstore->addNumber(5);
-			tstore->sayHi();
-			delete tstore;
+//			ThreadStore* tstore = new ThreadStore();
+//			tstore->addNumber(5);
+//			tstore->sayHi();
+//			delete tstore;
 			return VM_STATUS_SUCCESS;
 		}
 		else{																				//if VMMain is null, then the module failed to load

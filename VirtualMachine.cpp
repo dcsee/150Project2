@@ -161,6 +161,7 @@ extern "C"{
 		MachineRequestAlarm(tickms, callback, &mytick);		//request an alarm here, for useconds_t after calling the function
 		
 		//here, create a singleton ThreadStore to hold all the threads
+		//add a new thread to the thread store after calling vmloadmodule?
 	
 		TVMMainEntry VMMain;	//declare the variable to hold the function pointer to the loaded module's main() function	
 		const char* module = (const char*) argv[0];	//get the module from the command-line args

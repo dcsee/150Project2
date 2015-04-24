@@ -9,10 +9,18 @@ TCB::~TCB(){
 	
 }
 
-void TCB::setPriority(int n){
-	
+void TCB::setPriority(TVMThreadPriority p){
+	priority = p;
 }
 
-void TCB::sayHi(){
+TVMThreadPriority TCB::getPriority(){
+	return priority;
+}
+
+SMachineContextRef* TCB::exposeContext(){
+//returns the address of the machine's context, this lets
+//MachineContextSwitch() save the machine context into context
+
+	return &context;
 
 }

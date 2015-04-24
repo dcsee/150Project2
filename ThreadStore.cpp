@@ -8,7 +8,7 @@
 ThreadStore::ThreadStore(){
 	lowPriorityQueue = new queue<TCB>;
 
-	//creates a default "idle thread" with priority zero
+	//Here, create a new thread and TCB for the idle thread. Assign it priority 0
 	//	idleThread = new TCB();
 }
 
@@ -20,5 +20,12 @@ void ThreadStore::addThread(TCB n){
 	lowPriorityQueue->push(n);
 }
 
-void ThreadStore::sayHi(){
+int ThreadStore::getAlarmCounter(){
+	return alarmCounter;
+}
+
+void ThreadStore::setAlarmCounter(int ticks){
+	
+	alarmCounter = ticks;
+	
 }

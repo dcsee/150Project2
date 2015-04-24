@@ -18,6 +18,10 @@ extern "C"{
 	TVMStatus VMFilePrint(int filedescriptor, const char *format, ...);
 //end definitions
 	
+//Global Variables
+ThreadStore* threadStore;
+//
+	
 	//Dan's Threading Functions
 	
 		TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid){
@@ -110,23 +114,16 @@ extern "C"{
 				//return VM_STATUS_ERROR_INVALID_STATE;
 	}
 		
-	void clearAlarmCounter(void* data){ 
+	void decrementAlarmCounter(void* data){ 
 		//resets the sleep time to zero
-		useconds_t* mydata = (useconds_t*)data;
-		*mydata -= 1;	//cast data to a useconds_t pointer and reset it to zero
-//		cout << "This should only appear once" << endl;
+		threadStore->setAlarmCounter(threadStore->getAlarmCounter() - 1);
 		cout << "decremented alarm counter" << endl;
 		return;
 	}
 	
-	TVMStatus VMThreadSleep(TVMTick tick){
-		//TVMTick is just an unsigned int
-		//MachineRequestAlarm call signature:
-			//void MachineRequestAlarm(useconds_t usec, TMachineAlarmCallback callback, void *calldata);
-			//useconds_t is also an unsigned integer
-			
+	TVMStatus VMThreadSleep(TVMTick tick){		//TVMTick is just an unsigned int
 	
-	//VMThreadSleep puts the currently running thread to sleep for a number of ticks specified by parameter tick
+	//Puts the currently running thread to sleep for tick ticks
 	//if tick is the same as VM_TIMEOUT_IMMEDIATE, 
 		//the current process immediately goes to sleep
 		//the next ready process of EQUAL PRIORITY (NOT greater OR lesser) wakes up and begins executing,
@@ -134,12 +131,21 @@ extern "C"{
 		
 		//what I actually want to call here is change the thread's state to the WAIT state
 		
+		//need to set the global alarm counter to TICK ticks
+		//keep the alarm counter in the threadstore?
+		
+		//create a new Scheduler class to hold the alarm counter
+		
+		SMachineContext currentMachineContext;			
+		//MachineContextSwitch(currentThread->getCurrentMachineContext, threadStore->nextThread->nextContext);
+		
+		
 		cout << "going to sleep" << endl;	//debug
 		//set the callback function pointer here
 		//		MachineRequestAlarm((useconds_t) tick, callback, &tick);		//request an alarm here, for useconds_t after calling the function
-		for(mytick; mytick > 0;){
-			cout << "This should keep appearing until the alarm goes off" << endl;
-		}//do nothing while the time to sleep is greater than zero
+//		for(mytick; mytick > 0;){
+//			cout << "This should keep appearing until the alarm goes off" << endl;
+//		}//do nothing while the time to sleep is greater than zero
 		cout << "woke back up" << endl;	//debug
 		
 		//As per nitta's instructions on Piazza:  set up an alarm using MachineRequestAlarm to sleep and wake the thread
@@ -155,35 +161,25 @@ extern "C"{
 		//tickms is the time in milliseconds for the alarm, this will be the quantum. 
 		//machineticksms is the tick time of the machine, how long it will sleep in between actions. This was necessary because ppoll doesn't exist on all systems.
 
+		//initialize the threadstore
+		//to do: make it actually a singleton	
+		threadStore = new ThreadStore();
+		
 		//The following 3 lines initialize the machine layer
 		MachineInitialize(machinetickms);	//initialize the machine
-		TMachineAlarmCallback callback = &decrementAlarmCounter;
-		MachineRequestAlarm(tickms, callback, &mytick);		//request an alarm here, for useconds_t after calling the function 
-	
+		TMachineAlarmCallback callback = &decrementAlarmCounter;			//useconds_t is an unsigned integer
+		MachineRequestAlarm(tickms, callback, &alarmCounter);		//request an alarm here, for ticms MICROSECONDS after calling the function 
 		TVMMainEntry VMMain;	//declare the variable to hold the function pointer to the loaded module's main() function	
 		const char* module = (const char*) argv[0];	//get the module from the command-line args
+
+	//		ThreadStore *threadStore = new ThreadStore();
 		VMMain = VMLoadModule(module);							//load the module using VMLoad, save the VMMain function reference
 
-		SMachineContextRef mctnxref = MachineContextCreateRef;
-		
-		//here, create a singleton ThreadStore to hold all the threads
-//		ThreadStore *threadStore = new ThreadStore();
-		
-//creates TCB with entry = , param = NULL, memsize = , priority = low, tid = 1
-//		TCB *currentThread = new TCB();					//create a new TCB for the currently running thread
-//		threadStore->addThread(currentThread);	//add that TCB to the threadStore
-		
-		//Here, create a new TCB for the current thread, copy all its data in, and add it to the thread store
-		//Next, create a new thread and TCB for the idle thread. Assign it priority 0, and add it to the thread store
 		
 		if(VMMain != NULL){													//if VMMain is a valid reference,
 			VMMain(argc, argv);												//run the loaded module,
 			VMUnloadModule();													//then unload the module
 			cout << "VMMain ran successfully" << endl;
-//			ThreadStore* tstore = new ThreadStore();
-//			tstore->addNumber(5);
-//			tstore->sayHi();
-//			delete tstore;
 			return VM_STATUS_SUCCESS;
 		}
 		else{																				//if VMMain is null, then the module failed to load

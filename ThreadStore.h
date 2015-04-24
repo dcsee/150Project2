@@ -18,11 +18,14 @@ class ThreadStore{
 		virtual ~ThreadStore();
 		void sayHi();
 		void addThread(TCB n);
+		void setAlarmCounter(int ticks);
+		int getAlarmCounter();
 	
 	private:
 		TCB* idleThread;
-		ThreadStore(const &tStore);
+		ThreadStore(const ThreadStore &tStore);
 		queue<TCB>* lowPriorityQueue;
+		int alarmCounter;
 //		queue midPriorityQueue;
 //		queue highPriorityQueue;
 

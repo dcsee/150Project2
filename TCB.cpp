@@ -9,9 +9,7 @@ TCB::~TCB(){
 	
 }
 
-void TCB::addNumber(int n){
-	
-	lowPriorityQueue->push(n);
+void TCB::setPriority(int n){
 	
 }
 

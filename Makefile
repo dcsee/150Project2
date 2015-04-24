@@ -15,8 +15,7 @@ APPDIR=./apps
 OBJS=$(OBJDIR)/Machine.o \
      $(OBJDIR)/VirtualMachineUtils.o \
      $(OBJDIR)/VirtualMachine.o \
-     $(OBJDIR)/ThreadStore.o \
-		 $(OBJDIR)/main.o
+     $(OBJDIR)/main.o
 
 MODOBJS=$(OBJDIR)/module.o
      

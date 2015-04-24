@@ -154,9 +154,7 @@ extern "C"{
 
 		//tickms is the time in milliseconds for the alarm, this will be the quantum. 
 		//machineticksms is the tick time of the machine, how long it will sleep in between actions. This was necessary because ppoll doesn't exist on all systems.
-	
-		//here, create a singleton ThreadStore to hold all the threads
-	
+
 		//The following 3 lines initialize the machine layer
 		MachineInitialize(machinetickms);	//initialize the machine
 		TMachineAlarmCallback callback = &decrementAlarmCounter;
@@ -166,6 +164,15 @@ extern "C"{
 		const char* module = (const char*) argv[0];	//get the module from the command-line args
 		VMMain = VMLoadModule(module);							//load the module using VMLoad, save the VMMain function reference
 
+		SMachineContextRef mctnxref = MachineContextCreateRef;
+		
+		//here, create a singleton ThreadStore to hold all the threads
+//		ThreadStore *threadStore = new ThreadStore();
+		
+//creates TCB with entry = , param = NULL, memsize = , priority = low, tid = 1
+//		TCB *currentThread = new TCB();					//create a new TCB for the currently running thread
+//		threadStore->addThread(currentThread);	//add that TCB to the threadStore
+		
 		//Here, create a new TCB for the current thread, copy all its data in, and add it to the thread store
 		//Next, create a new thread and TCB for the idle thread. Assign it priority 0, and add it to the thread store
 		

@@ -8,19 +8,20 @@
 
 
 extern "C"{
+	
 	using namespace std;
 
-//These are definitions for VirtualMachineUtils.c
-//They are implemented using Professor Nitta's provided source code in VirtualMachineUtils.c
-	typedef void (*TVMMainEntry)(int, char*[]);
-	TVMMainEntry VMLoadModule(const char* module);
+	//Definitions
+	typedef void (*TVMMainEntry)(int, char*[]); //These are definitions for VirtualMachineUtils.c
+	TVMMainEntry VMLoadModule(const char* module); //They are implemented using Professor Nitta's provided source code in VirtualMachineUtils.c
 	void VMUnloadModule(void);
 	TVMStatus VMFilePrint(int filedescriptor, const char *format, ...);
-//end definitions
+	//End Definitions
+
 	
-//Global Variables
+	//Global Variables
 	ThreadStore* threadStore;
-//
+	//End Global Variables
 	
 	//Vincent's File Functions
 	
@@ -37,13 +38,15 @@ extern "C"{
     else
         return VM_STATUS_SUCCESS;
 	}
+	
 	TVMStatus VMFileClose(int filedescriptor){
     fclose(filedescriptor);
 	}
 	
+	/*Still need to implement this one
 	TVMStatus VMFileRead(int filedescriptor, void *data, int *length){
 
-	}
+	}*/
 	
 	TVMStatus VMFileWrite(int filedescriptor, void *data, int *length){
     if (data || length == NULL)
@@ -53,10 +56,12 @@ extern "C"{
     else
         return VM_STATUS_SUCCESS;
 	}
-	
-//	TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset){
+
+	/*Still need to implement this one
+	TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset){
     
-//	}
+	}
+	*/
 
 	TVMStatus VMFilePrint(int filedescriptor, const char *format, ...){
     va_list ParamList;
@@ -79,30 +84,10 @@ extern "C"{
     free(OutputBuffer);
     return ReturnValue;
 	}
+	//End Vincent's File Functions
+	
 
-	
-	
 	//Dan's Threading Functions
-	
-		TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid){
-		//creates a thread in the virtual machine, thread begins in the dead state VM_THREAD_STATE_DEAD
-		//entry specifies the function of the thread
-		//param specifies the parameter that is passed to the function
-		//memsize specifies the size of the thread's stack
-		//prio specifies the thread's priority
-		//tid specifies at which location to put the thread identifier
-		
-		//also creates a thread control block and pushes it into the appropriate queue in ThreadStore
-		
-		
-		cout << "Entered VMThreadCreate" <<endl;
-		
-		//if the thread was successfully created,
-		return VM_STATUS_SUCCESS;
-		//if entry or tid is NULL, return
-		//return VM_STATUS_ERROR_INVALID_PARAMETER;
-	}
-
 	
 	TVMStatus VMThreadState(TVMThreadID thread, TVMThreadStateRef state){
 		//retrieves the state of the thread specified by parameter thread, and places that state into the location specified by parameter state
@@ -174,11 +159,23 @@ extern "C"{
 				//return VM_STATUS_ERROR_INVALID_STATE;
 	}
 		
-	void decrementAlarmCounter(void* data){ 
-		//resets the sleep time to zero
-		threadStore->setAlarmCounter(threadStore->getAlarmCounter() - 1);
-		cout << "decremented alarm counter" << endl;
-		return;
+	TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid){
+		//creates a thread in the virtual machine, thread begins in the dead state VM_THREAD_STATE_DEAD
+		//entry specifies the function of the thread
+		//param specifies the parameter that is passed to the function
+		//memsize specifies the size of the thread's stack
+		//prio specifies the thread's priority
+		//tid specifies at which location to put the thread identifier
+		
+		//also creates a thread control block and pushes it into the appropriate queue in ThreadStore
+		
+		
+		cout << "Entered VMThreadCreate" <<endl;
+		
+		//if the thread was successfully created,
+		return VM_STATUS_SUCCESS;
+		//if entry or tid is NULL, return
+		//return VM_STATUS_ERROR_INVALID_PARAMETER;
 	}
 	
 	TVMStatus VMThreadSleep(TVMTick tick){		//TVMTick is just an unsigned int
@@ -214,8 +211,17 @@ extern "C"{
 			return VM_STATUS_SUCCESS;
 	//if the sleep duration tick is the same as VM_TIMEOUT_INFINITE,
 	//		return VM_STATUS_ERROR_INVALID_PARAMETER;
-}
-	
+	}
+	//End Dan's Threading Functions
+
+	//Utility Functions
+	void decrementAlarmCounter(void* data){ 
+		//resets the sleep time to zero
+		threadStore->setAlarmCounter(threadStore->getAlarmCounter() - 1);
+		cout << "decremented alarm counter" << endl;
+		return;
+	}
+	//End Utility Functions
 	
 	TVMStatus VMStart(int tickms, int machinetickms, int argc, char* argv[]){
 
@@ -249,10 +255,10 @@ extern "C"{
 		}
 	}
 	
-	TVMStatus VMFileWrite(int fileDescriptor, void *data, int *length){
+//	TVMStatus VMFileWrite(int fileDescriptor, void *data, int *length){
 	
 		//this is another dummy function to make the code compile
-		return VM_STATUS_SUCCESS;
+//		return VM_STATUS_SUCCESS;
 	
 	}
 

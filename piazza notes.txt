@@ -1,0 +1,9 @@
+You will want to store a context, stack, thread state, (possibly number of ticks left of sleep), thread ID, entry function, and entry parameter in your TCB
+
+The TCB is the thread equivalent of the PCB. You will create your own TCB to store the required information.
+
+After VMThreadCreate has been called there are two threads that exist, but the second thread is not executing. You need to call VMTreadActivate to activate it. In order to store the context of the thread, you need to just have the registers scored on the stack and save the stack pointer. You can switch contexts by storing the current CPU registers on the stack, saving the stack pointer, restoring the new stack pointer, and popping off the CPU registers. You can use MachineContextSwtich to do the context switch for you.
+
+	How would you store the registers on the stack? and how do you get the stack pointer? 
+	
+	You use the MachineContext functions to do it for you. You don't have to worry about it.

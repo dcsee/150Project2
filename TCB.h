@@ -7,6 +7,7 @@
 #include <queue>
 
 #include "VirtualMachine.h"
+#include "Machine.h"
 
 using namespace std;
 
@@ -16,7 +17,7 @@ class TCB{
 		TCB();
 		virtual ~TCB();
 		
-		SMachineContextRef* exposeContext();
+		SMachineContextRef exposeContext();
 		TVMThreadPriority getPriority();
 		void setPriority();
 		

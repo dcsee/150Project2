@@ -4,6 +4,7 @@
 
 //should remove this one after the project is done
 #include <iostream>
+#include <cstdio>
 
 
 
@@ -18,13 +19,22 @@ extern "C"{
 	TVMStatus VMFilePrint(int filedescriptor, const char *format, ...);
 	//End Definitions
 
+	void dummyCallback(void *data, int result){
+		
+		int* mydata = (int*)data;
+		*mydata = result;
+		
+		printf("\nin the callback");
+		printf("\nmydata is: %d", *(int*)data);
+		return;
+	}
 	
 	//Global Variables
-	ThreadStore* threadStore;
+//	ThreadStore* threadStore;
 	//End Global Variables
 	
 	//Vincent's File Functions
-	
+	/*
 	TVMStatus VMFileOpen(const char *filename, int flags, int mode, int *filedescriptor){
     FILE* file;
     struct stat *perm;
@@ -48,12 +58,26 @@ extern "C"{
 
 	}*/
 	
-	TVMStatus VMFileWrite(int filedescriptor, void *data, int *length){
-    if (data || length == NULL)
+	TVMStatus VMFileWrite(int fileDescriptor, void *data, int *length){
+    
+		int callbackdata = -1337;
+		TMachineFileCallback callback = &dummyCallback;
+		
+		if ((data == NULL) || (length == NULL))
         return VM_STATUS_ERROR_INVALID_PARAMETER;
-    else if (!(write(filedescriptor, data, length))
-        return VM_STATUS_FAILURE;
-    else
+			
+		MachineFileWrite(fileDescriptor, data, *length, callback, (void*)(&callbackdata));
+		
+		while(callbackdata != -1337);
+		
+		printf("\nResult is: %d", callbackdata);
+		
+//		cout << "in file write!" << endl;
+		
+	
+//    if (write(fileDescriptor, data, (size_t)(*length)) == -1)
+//        return VM_STATUS_FAILURE;
+ //   else
         return VM_STATUS_SUCCESS;
 	}
 
@@ -62,7 +86,7 @@ extern "C"{
     
 	}
 	*/
-
+/*
 	TVMStatus VMFilePrint(int filedescriptor, const char *format, ...){
     va_list ParamList;
     char *OutputBuffer;
@@ -85,7 +109,7 @@ extern "C"{
     return ReturnValue;
 	}
 	//End Vincent's File Functions
-	
+	*/
 
 	//Dan's Threading Functions
 	
@@ -178,7 +202,10 @@ extern "C"{
 		//return VM_STATUS_ERROR_INVALID_PARAMETER;
 	}
 	
+	TVMTick alarmCounter;
 	TVMStatus VMThreadSleep(TVMTick tick){		//TVMTick is just an unsigned int
+	
+		alarmCounter = tick;
 	
 	//Puts the currently running thread to sleep for tick ticks
 	//if tick is the same as VM_TIMEOUT_IMMEDIATE, 
@@ -195,7 +222,6 @@ extern "C"{
 		
 		SMachineContext currentMachineContext;			
 		//MachineContextSwitch(currentThread->getCurrentMachineContext, threadStore->nextThread->nextContext);
-		
 		
 		cout << "going to sleep" << endl;	//debug
 		//set the callback function pointer here
@@ -214,52 +240,44 @@ extern "C"{
 	}
 	//End Dan's Threading Functions
 
+	
 	//Utility Functions
-	void decrementAlarmCounter(void* data){ 
+	void decrementAlarmCounter(void* data){
 		//resets the sleep time to zero
-		threadStore->setAlarmCounter(threadStore->getAlarmCounter() - 1);
-		cout << "decremented alarm counter" << endl;
+		//threadStore->setAlarmCounter(threadStore->getAlarmCounter() - 1);
+		
+		*((TVMTick*)data) -= 1;
+		printf("\ndecremented alarm counter");
 		return;
 	}
 	//End Utility Functions
 	
 	TVMStatus VMStart(int tickms, int machinetickms, int argc, char* argv[]){
-
 		//tickms is the time in milliseconds for the alarm, this will be the quantum. 
-		//machineticksms is the tick time of the machine, how long it will sleep in between actions. This was necessary because ppoll doesn't exist on all systems.
+		//machineticksms is the tick time of the machine, how long it will sleep in between actions.
 
 		//initialize the threadstore
 		//to do: make it actually a singleton	
-		threadStore = new ThreadStore();
+		//threadStore = new ThreadStore();
 		
-		//The following 3 lines initialize the machine layer
-		MachineInitialize(machinetickms);	//initialize the machine
-		TMachineAlarmCallback callback = &decrementAlarmCounter;			//useconds_t is an unsigned integer
-		MachineRequestAlarm(tickms, callback, &alarmCounter);		//request an alarm here, for ticms MICROSECONDS after calling the function 
+		MachineInitialize(machinetickms);	//Initialize the machine
+		TMachineAlarmCallback callback = &decrementAlarmCounter;		//useconds_t is an unsigned integer
+		MachineRequestAlarm(tickms*1000, callback, &alarmCounter);				//request an alarm here, for ticms MICROSECONDS after calling the function 
+		MachineEnableSignals();	//enable signals	
 		TVMMainEntry VMMain;	//declare the variable to hold the function pointer to the loaded module's main() function	
 		const char* module = (const char*) argv[0];	//get the module from the command-line args
-
 		VMMain = VMLoadModule(module);							//load the module using VMLoad, save the VMMain function reference
-
 		
 		if(VMMain != NULL){													//if VMMain is a valid reference,
 			VMMain(argc, argv);												//run the loaded module,
 			VMUnloadModule();													//then unload the module
-			cout << "VMMain ran successfully" << endl;
+			printf("\nfinished vmfilewrite");
 			return VM_STATUS_SUCCESS;
 		}
 		else{																				//if VMMain is null, then the module failed to load
 			VMUnloadModule();													//unload the module and return error status
-			cout << "VMMain failed" << endl;
+//			cout << "VMMain failed" << endl;
 			return VM_STATUS_FAILURE;			
 		}
 	}
-	
-//	TVMStatus VMFileWrite(int fileDescriptor, void *data, int *length){
-	
-		//this is another dummy function to make the code compile
-//		return VM_STATUS_SUCCESS;
-	
-	}
-
 }

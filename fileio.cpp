@@ -15,7 +15,7 @@ TVMStatus VMFileOpen(const char *filename, int flags, int mode, int *filedescrip
     int temp;
     struct stat *perm;
     stat(filename, perm);
-    open(filename, flags, mode);
+    temp = open(filename, flags, mode);
     filedescriptor = &temp;
     if (filename || filedescriptor == NULL)
         return VM_STATUS_ERROR_INVALID_PARAMETER;

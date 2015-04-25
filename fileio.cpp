@@ -1,51 +1,58 @@
+#include "VirtualMachine.h"
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <dlfcn.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+#define SMALL_BUFFER_SIZE       256
+
 TVMStatus VMFileOpen(const char *filename, int flags, int mode, int *filedescriptor){
     FILE* file;
     struct stat *perm;
-    filedescriptor = stat(filename, perm);
+    stat(filename, perm);
+    filedescriptor = open(filename, flags, mode);
     if (filename || filedescriptor == NULL)
         return VM_STATUS_ERROR_INVALID_PARAMETER;
-    else if (!(file = fopen(filename, "r")))
-        return VM_STATUS_FAILURE;
-    else if ((perm->mode & flags) != 1)
+    else if (filedescriptor < 0)
         return VM_STATUS_FAILURE;
     else
         return VM_STATUS_SUCCESS;
 }
 TVMStatus VMFileClose(int filedescriptor){
-    fclose(filedescriptor);
+    if (!(close(filedescriptor)))
+        return VM_STATUS_FAILURE;
+    else
+        return VM_STATUS_SUCCESS;
 }
 TVMStatus VMFileRead(int filedescriptor, void *data, int *length){
+    if (data || length == NULL)
+        return VM_STATUS_ERROR_INVALID_PARAMETER;
+    else if (read(filedescriptor, data, length) < 0)
+        return VM_STATUS_FAILURE;
+    else
+        return VM_STATUS_SUCCESS;
 
 }
 TVMStatus VMFileWrite(int filedescriptor, void *data, int *length){
     if (data || length == NULL)
         return VM_STATUS_ERROR_INVALID_PARAMETER;
-    else if (!(write(filedescriptor, data, length))
+    else if (!(write(filedescriptor, data, length)))
         return VM_STATUS_FAILURE;
     else
         return VM_STATUS_SUCCESS;
 }
 TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset){
+    char buffer[SMALL_BUFFER_SIZE];
     
-}
-TVMStatus VMFilePrint(int filedescriptor, const char *format, ...){
-    va_list ParamList;
-    char *OutputBuffer;
-    char SmallBuffer[SMALL_BUFFER_SIZE];
-    int SizeRequired;
-    TVMStatus ReturnValue;
-    
-    va_start(ParamList, format);
-    OutputBuffer = SmallBuffer;
-    
-    SizeRequired = vsnprintf(OutputBuffer, SMALL_BUFFER_SIZE, format, ParamList);
-    if(SizeRequired < SMALL_BUFFER_SIZE){
-        ReturnValue = VMFileWrite(filedescriptor, OutputBuffer, &SizeRequired);
-        return ReturnValue;
+    if (lseek(filedescriptor, offset*SMALL_BUFFER_SIZE, whence) <0)
+        return VM_STATUS_FAILURE;
+    else
+    {
+        newoffset = VMFileRead(filedescriptor, buffer, SMALL_BUFFER_SIZE);
+        return VM_STATUS_SUCCESS;
     }
-    OutputBuffer = (char *)malloc(sizeof(char) *(SizeRequired + 1));
-    SizeRequired = vsnprintf(OutputBuffer, SizeRequired, format, ParamList);
-    ReturnValue = VMFileWrite(filedescriptor, OutputBuffer, &SizeRequired);
-    free(OutputBuffer);
-    return ReturnValue;
 }

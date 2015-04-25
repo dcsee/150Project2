@@ -12,9 +12,11 @@
 
 TVMStatus VMFileOpen(const char *filename, int flags, int mode, int *filedescriptor){
     FILE* file;
+    int temp;
     struct stat *perm;
     stat(filename, perm);
-    filedescriptor = open(filename, flags, mode);
+    open(filename, flags, mode);
+    filedescriptor = &temp;
     if (filename || filedescriptor == NULL)
         return VM_STATUS_ERROR_INVALID_PARAMETER;
     else if (filedescriptor < 0)
@@ -29,30 +31,40 @@ TVMStatus VMFileClose(int filedescriptor){
         return VM_STATUS_SUCCESS;
 }
 TVMStatus VMFileRead(int filedescriptor, void *data, int *length){
+    size_t temp;
+    temp = abs(*length);
+    
     if (data || length == NULL)
         return VM_STATUS_ERROR_INVALID_PARAMETER;
-    else if (read(filedescriptor, data, length) < 0)
+    else if (read(filedescriptor, data, temp) < 0)
         return VM_STATUS_FAILURE;
     else
         return VM_STATUS_SUCCESS;
 
 }
 TVMStatus VMFileWrite(int filedescriptor, void *data, int *length){
+    size_t temp;
+    temp = abs(*length);
+    
     if (data || length == NULL)
         return VM_STATUS_ERROR_INVALID_PARAMETER;
-    else if (!(write(filedescriptor, data, length)))
+    else if (!(write(filedescriptor, data, temp)))
         return VM_STATUS_FAILURE;
     else
         return VM_STATUS_SUCCESS;
 }
 TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset){
     char buffer[SMALL_BUFFER_SIZE];
+    int temp;
     
     if (lseek(filedescriptor, offset*SMALL_BUFFER_SIZE, whence) <0)
         return VM_STATUS_FAILURE;
     else
     {
-        newoffset = VMFileRead(filedescriptor, buffer, SMALL_BUFFER_SIZE);
+        temp = SEEK_CUR;
+        newoffset = &temp;
         return VM_STATUS_SUCCESS;
+
     }
 }
+

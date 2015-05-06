@@ -9,105 +9,250 @@ TCB* vmStartThread;
 extern "C" {
 
 
+//=== Mutex ==================================================================
+
+
+TVMStatus VMMutexCreate(TVMMutexIDRef mutexref){
+	TMachineSignalState sigState;	
+	MachineSuspendSignals(&sigState);
+	ThreadStore* tStore = ThreadStore::getInstance();
+	
+	if(mutexref == NULL){
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	Mutex* mutex = new Mutex();
+	tStore->insert(mutex);	//insert is overloaded to work with mutexes and TCB*s
+	*mutexref = mutex->getID();
+	
+	MachineResumeSignals(&sigState);
+	return VM_STATUS_SUCCESS;
+}
+
+TVMStatus VMMutexDelete(TVMMutexID mutexID){
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);
+	ThreadStore* tStore = ThreadStore::getInstance();
+	Mutex* mutex = tStore->findMutexByID(mutexID);	
+
+	if(mutex == NULL){	//if the mutex does not exist
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_ID;
+	}
+
+	if(mutex->isDeleted() == true){			//mutex is marked for deletion
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_ID;
+	}
+
+	if(mutex->getOwner() != NULL){					//if the mutex is held, do not delete it
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_STATE;
+	}
+
+	//else, mark for deletion
+	mutex->deleteFromVM();
+	MachineResumeSignals(&sigState);
+	return VM_STATUS_SUCCESS;
+}
+
+TVMStatus VMMutexQuery(TVMMutexID mutexID, TVMThreadIDRef ownerref){
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);
+	ThreadStore* tStore = ThreadStore::getInstance();
+	Mutex* mutex = tStore->findMutexByID(mutexID);
+	
+	if(ownerref == NULL){
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	if(mutex == NULL){
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_ID;
+	}
+	
+	if(mutex->isDeleted() == true){
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_ID;
+	}
+
+	if(mutex->getOwner() == NULL){		//if the mutex is UNLOCKED, error
+		MachineResumeSignals(&sigState);
+  	return VM_THREAD_ID_INVALID;
+	}
+
+	//if the mutex exists, is not deleted, is not free, and if we have somewhere to put the result...	
+	*ownerref = mutex->getOwner()->getThreadID();	//return the owner
+	MachineResumeSignals(&sigState);
+	return VM_STATUS_SUCCESS;
+}
+
+TVMStatus VMMutexAcquire(TVMMutexID mutexID, TVMTick timeout){
+	TMachineSignalState sigState;
+	MachineSuspendSignals(&sigState);
+	ThreadStore* tStore = ThreadStore::getInstance();
+	TCB* currentThread = tStore->getCurrentThread();
+	Mutex* mutex = tStore->findMutexByID(mutexID);
+	
+	if(mutex == NULL){	//if mutex doesnt exist, error
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_ID;
+	}
+
+	if(mutex->isDeleted() == true){	//if mutex deleted, error
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_ID;
+	}
+
+	mutex->lock(currentThread, timeout);	//may block here until timeout expires
+
+	if(mutex->getOwner() != currentThread){
+		MachineResumeSignals(&sigState);
+		return VM_STATUS_FAILURE;
+	}
+
+	MachineResumeSignals(&sigState);
+	return VM_STATUS_SUCCESS;
+}
+
+TVMStatus VMMutexRelease(TVMMutexID mutexID){
+	TMachineSignalState sigState;
+	MachineSuspendSignals(&sigState);
+	ThreadStore* tStore = ThreadStore::getInstance();
+	TCB* currentThread = tStore->getCurrentThread();
+	Mutex* mutex = tStore->findMutexByID(mutexID);
+	
+	if(mutex == NULL){
+		MachineResumeSignals(&sigState);
+  	return VM_STATUS_ERROR_INVALID_ID;
+	}
+
+	if(mutex->getOwner() != currentThread){
+		return VM_STATUS_ERROR_INVALID_STATE;
+	}
+
+	mutex->release();
+	MachineResumeSignals(&sigState);
+	return VM_STATUS_SUCCESS;
+}
+
+//============================================================================
+
 //=== Files and IO ==================================================================
 
 TVMStatus VMFileSeek(int filedescriptor, int offset, int whence, int *newoffset){
-
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);
 	ThreadStore* tStore = ThreadStore::getInstance();
 	TCB* currentThread = tStore->getCurrentThread();
-	TMachineFileCallback callBack = &machineFileSeekCallback;
 	
-	MachineFileSeek(filedescriptor, offset, whence, callBack, (void*)currentThread);
-	MachineEnableSignals();
-	tStore->waitCurrentThreadOnIO();//resume execution here after IO completes
-	
-	if(currentThread->getFileSeekResult() < 0){	//if call to open() failed
-		return VM_STATUS_FAILURE;		//return failure state
-	}
-	
-	return VM_STATUS_SUCCESS;
-
-}
-
-TVMStatus VMFileRead(int filedescriptor, void *data, int *length){
-
-	ThreadStore* tStore = ThreadStore::getInstance();
-	TCB* currentThread = tStore->getCurrentThread();
-	TMachineFileCallback callBack = &machineFileReadCallback;
-  
-	if ((data == NULL) || (length == NULL)){
+	if(newoffset == NULL){
+		MachineResumeSignals(&sigState);
   	return VM_STATUS_ERROR_INVALID_PARAMETER;
 	}
 	
-	MachineFileRead(filedescriptor, data, *length, callBack, (void*)currentThread);
-	MachineEnableSignals();
+	MachineFileSeek(filedescriptor, offset, whence, &machineFileIOCallback, (void*)currentThread);
 	tStore->waitCurrentThreadOnIO();//resume execution here after IO completes
+	*newoffset = currentThread->getFileIOResult();	
 	
-	if(currentThread->getFileReadResult() < 0){	//if call to open() failed
+	if(currentThread->getFileIOResult() < 0){	//if call to open() failed
+		MachineResumeSignals(&sigState);
 		return VM_STATUS_FAILURE;		//return failure state
 	}
 	
+	MachineResumeSignals(&sigState);
+	return VM_STATUS_SUCCESS;
+}
+
+TVMStatus VMFileRead(int filedescriptor, void *data, int *length){
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);	//suspend signals so we cannot be pre-empted while scheduling a new thread
+	ThreadStore* tStore = ThreadStore::getInstance();
+	TCB* currentThread = tStore->getCurrentThread();
+  
+	if ((data == NULL) || (length == NULL)){
+		MachineResumeSignals (&sigState);
+  	return VM_STATUS_ERROR_INVALID_PARAMETER;
+	}
+	
+	MachineFileRead(filedescriptor, data, *length, &machineFileIOCallback, (void*)currentThread);
+	tStore->waitCurrentThreadOnIO();								//resume execution here after IO completes
+	*length = currentThread->getFileIOResult();
+	
+	if(currentThread->getFileIOResult() < 0){			//if call to open() failed
+		MachineResumeSignals (&sigState);
+		return VM_STATUS_FAILURE;											//return failure state
+	}
+
+	MachineResumeSignals (&sigState);
 	return VM_STATUS_SUCCESS;
 }
 
 TVMStatus VMFileClose(int filedescriptor){
-
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);	//suspend signals so we cannot be pre-empted while scheduling a new thread
 	ThreadStore* tStore = ThreadStore::getInstance();
 	TCB* currentThread = tStore->getCurrentThread();
-	TMachineFileCallback callBack = &machineFileCloseCallback;
 
-	MachineFileClose(filedescriptor, callBack, (void*)currentThread);
+	MachineFileClose(filedescriptor, machineFileIOCallback, (void*)currentThread);
 	tStore->waitCurrentThreadOnIO();//resume execution here after IO completes
-	MachineEnableSignals();
 	
-  if (currentThread->getFileCloseResult() < 0)
+	if(currentThread->getFileIOResult() < 0){
+		MachineResumeSignals (&sigState);
     return VM_STATUS_FAILURE;
-	else
-		return VM_STATUS_SUCCESS;
+	}
+	
+	MachineResumeSignals (&sigState);
+	return VM_STATUS_SUCCESS;
 }
 
 TVMStatus VMFileOpen(const char *filename, int flags, int mode, int *filedescriptor){
-	
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);	//suspend signals so we cannot be pre-empted while scheduling a new thread
 	ThreadStore* tStore = ThreadStore::getInstance();
 	TCB* currentThread = tStore->getCurrentThread();
-	TMachineFileCallback callBack = &machineFileOpenCallback;
   
 	if ((filename == NULL) || (filedescriptor == NULL)){
+		MachineResumeSignals (&sigState);
   	return VM_STATUS_ERROR_INVALID_PARAMETER;
 	}
 	
-	MachineFileOpen(filename, flags, mode, callBack, (void*)currentThread);
-	MachineEnableSignals();
+	MachineFileOpen(filename, flags, mode, &machineFileIOCallback, (void*)currentThread);
 	tStore->waitCurrentThreadOnIO();//resume execution here after IO completes
-	*filedescriptor = currentThread->getFileOpenResult();	//return result by reference
+	*filedescriptor = currentThread->getFileIOResult();	//return result by reference
 	
-	if(currentThread->getFileOpenResult() < 0){	//if call to open() failed
+	if(currentThread->getFileIOResult() < 0){	//if call to open() failed
+		MachineResumeSignals (&sigState);
 		return VM_STATUS_FAILURE;		//return failure state
 	}
 	
+	MachineResumeSignals (&sigState);
 	return VM_STATUS_SUCCESS;
 }
 
 TVMStatus VMFileWrite(int fileDescriptor, void* data, int *length){
-
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);	//suspend signals so we cannot be pre-empted while scheduling a new thread
 	ThreadStore* tStore = ThreadStore::getInstance();
 	TCB* currentThread = tStore->getCurrentThread();
-	TMachineFileCallback callBack = &machineFileWriteCallback;
 	
 	if((data == NULL) || (length == NULL)){
-		printf("VMFileWrite(): error length and data are null\n");
+		MachineResumeSignals (&sigState);
 		return VM_STATUS_ERROR_INVALID_PARAMETER;
 	}
 	
-	MachineFileWrite(fileDescriptor, data, *length, callBack, (void*)currentThread);
-	MachineEnableSignals();						//enable signals. Do this after any file i/o	
+		MachineFileWrite(fileDescriptor, data, *length, &machineFileIOCallback, (void*)currentThread);
+	//This works because idle() has a call to MachineEnableSignals in it. Otherwise would need MachineEnableSignals() here	
 	tStore->waitCurrentThreadOnIO();	//switch to a new thread here, don't do a wait loop
-	
-	if(currentThread->getFileWriteResult() < 0){
-		//indicates an error has occurred with MachineFileWrite
+	*length = currentThread->getFileIOResult();
+
+	if(currentThread->getFileIOResult() < 0){
+		MachineResumeSignals (&sigState);
 		return VM_STATUS_FAILURE;
 	}
-//	printf("\nVMFileWrite(): complete\n");
+	MachineResumeSignals (&sigState);
 	return VM_STATUS_SUCCESS;
 }
 
@@ -119,84 +264,97 @@ TVMStatus VMFileWrite(int fileDescriptor, void* data, int *length){
 //
 
 TVMStatus VMThreadDelete(TVMThreadID thread){
-
-	TCB* currentThread = NULL;
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);	//suspend signals so we cannot be pre-empted while scheduling a new thread
 	ThreadStore* tStore = ThreadStore::getInstance();
-	currentThread = tStore->findThreadByID(thread);	//returns NULL on not finding thread
+	TCB* currentThread = tStore->findThreadByID(thread);	//returns NULL on not finding thread
 
 	if(currentThread == NULL){								//if thread was not found, error
+		MachineResumeSignals (&sigState);
 		return VM_STATUS_ERROR_INVALID_ID;
 	}
 	
 	if(currentThread->getState() != VM_THREAD_STATE_DEAD){
+		MachineResumeSignals (&sigState);
 		return VM_STATUS_ERROR_INVALID_STATE;
 	}
 
 	tStore->deleteDeadThread(currentThread);
+	MachineResumeSignals(&sigState);
 	return VM_STATUS_SUCCESS;
-
 }
 
 TVMStatus VMThreadTerminate(TVMThreadID thread){
-
-	TCB* currentThread = NULL;
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);
 	ThreadStore* tStore = ThreadStore::getInstance();
-	currentThread = tStore->findThreadByID(thread);	//returns NULL on not finding thread
+	TCB* threadToTerminate = tStore->findThreadByID(thread);	//returns NULL on not finding thread
 
-	if(currentThread == NULL){								//if thread was not found, error
+
+	if(threadToTerminate == NULL){								//if thread was not found, error
+		MachineResumeSignals(&sigState);
 		return VM_STATUS_ERROR_INVALID_ID;
 	}
 	
-	if(currentThread->getState() == VM_THREAD_STATE_DEAD){
+	if(threadToTerminate->getState() == VM_THREAD_STATE_DEAD){
+		MachineResumeSignals(&sigState);
 		return VM_STATUS_ERROR_INVALID_STATE;
 	}
 	else{
-		tStore->terminate(currentThread);
+		tStore->terminate(threadToTerminate);
+		MachineResumeSignals(&sigState);
+		return VM_STATUS_SUCCESS;
 	}
-	return VM_STATUS_SUCCESS;
 }
 
 TVMStatus VMThreadState(TVMThreadID thread, TVMThreadStateRef stateRef){
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);
 
 	if(stateRef == NULL){											//if stateRef is null, error
+		MachineResumeSignals(&sigState);
 		return VM_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	TCB* currentThread = NULL;
 	ThreadStore* tStore = ThreadStore::getInstance();
-	currentThread = tStore->findThreadByID(thread);	//returns NULL on not finding thread
+	TCB* currentThread = tStore->findThreadByID(thread);	//returns NULL on not finding thread
 
 	if(currentThread == NULL){								//if thread was not found, error
+		MachineResumeSignals(&sigState);
 		return VM_STATUS_ERROR_INVALID_ID;
 	}
-	
 	*stateRef = currentThread->getState();		//otherwise, success
+	MachineResumeSignals(&sigState);
 	return VM_STATUS_SUCCESS;
 }
 
 TVMStatus VMThreadActivate(TVMThreadID thread){
-	//activates dead thread by ID, which then enters ready state
-	
-	TCB* threadToActivate = ThreadStore::getInstance()->findThreadByID(thread);
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);
+	ThreadStore* tStore = ThreadStore::getInstance();
+	TCB* threadToActivate = tStore->findThreadByID(thread);
 
-	if(threadToActivate == NULL)					//thread ID does not exist
+	if(threadToActivate == NULL){					//thread ID does not exist
+		MachineResumeSignals(&sigState);
 		return VM_STATUS_ERROR_INVALID_ID;	//error status
+	}
 	
-	if(threadToActivate->getState() != VM_THREAD_STATE_DEAD)	//thread exists but in wrong state
+	if(threadToActivate->getState() != VM_THREAD_STATE_DEAD){	//thread exists but in wrong state
+		MachineResumeSignals(&sigState);
 		return VM_STATUS_ERROR_INVALID_STATE;										//error status
-
-	printf("\nVMThreadActivate(): activating TID %d", threadToActivate->getThreadID());
-	ThreadStore::getInstance()->activateDeadThread(threadToActivate);	//activate given thread from dead list	
-
+	}
+	tStore->activateDeadThread(threadToActivate);	//activate given thread from dead list	
+	MachineResumeSignals(&sigState);
 	return VM_STATUS_SUCCESS;							//only other alternative is success
 }
 
 TVMStatus VMThreadID(TVMThreadIDRef threadRef){
-
-		//returns thread id of currently running thread into location specified by threadref
-		//Sets thread id BY REFERENCE, threadref is ADDRESS.
+//returns thread id of currently running thread into location specified by threadref
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);
 	
-		if(threadRef == NULL){
+	if(threadRef == NULL){
+			MachineResumeSignals(&sigState);
 			return VM_STATUS_ERROR_INVALID_PARAMETER;
 		}
 
@@ -204,55 +362,49 @@ TVMStatus VMThreadID(TVMThreadIDRef threadRef){
 		TCB* currentThread = ThreadStore::getInstance()->getCurrentThread();
 		TVMThreadID currentThreadID = currentThread->getThreadID();
 		*threadRef = currentThreadID;
+		MachineResumeSignals(&sigState);
 		return VM_STATUS_SUCCESS;			//thread ID is successfully retrieved, stored in the location specified by threadref,
 	}
 
 TVMStatus VMThreadCreate(TVMThreadEntry entry, void *param, TVMMemorySize memsize, TVMThreadPriority prio, TVMThreadIDRef tid){
-		
-		//creates thread beginning in VM_THREAD_STATE_DEAD
-		//entry: entry function of thread, param: parameter for entry function
-		//memsize: size of thread's stack, prio: thread's priority, tid: address of variable that holds thread id
 
-		TMachineSignalState signalState;
-		MachineSuspendSignals((TMachineSignalStateRef)&signalState);
-
-		printf("\nEntered VMThreadCreate!!!\n\n");
+		TMachineSignalState sigState;
+		MachineSuspendSignals(&sigState);
 		
 		if((entry == NULL) || (tid == NULL)){
+			MachineResumeSignals(&sigState);
 			return VM_STATUS_ERROR_INVALID_PARAMETER;
 		}
 
 		ThreadStore *tStore = ThreadStore::getInstance(); 					//get the threadstore
 		TCB* tcb = new TCB(entry, param, memsize, prio, tid);				//create TCB 
+		
 		tStore->insert(tcb);																				//pushes TCB into appropriate queue in ThreadStore
-		MachineResumeSignals((TMachineSignalStateRef)&signalState);	//resume signals
-
+		MachineResumeSignals(&sigState);
 		return VM_STATUS_SUCCESS;
 	}
 
-
-
 TVMStatus VMThreadSleep(TVMTick tick){
-	//Puts running thread to sleep for tick ticks/quantums
-
-	if(tick == VM_TIMEOUT_INFINITE){
-		return VM_STATUS_ERROR_INVALID_PARAMETER;
-	}
-	
+//Puts running thread to sleep for tick ticks/quantums
+	TMachineSignalState sigState;			
+	MachineSuspendSignals(&sigState);
 	ThreadStore *tStore = ThreadStore::getInstance();
 
-	if(tick == VM_TIMEOUT_IMMEDIATE){
+	if(tick == VM_TIMEOUT_INFINITE){
+		MachineResumeSignals(&sigState);
+		return VM_STATUS_ERROR_INVALID_PARAMETER;
+	}
 
-		printf("VMThreadSleep(): sleep immediately!\n");
+	if(tick == VM_TIMEOUT_IMMEDIATE){
 		tStore->sleepCurrentThread(0);	//sets the current thread to sleep and schedules a new one in its place
 	}
 	else{
-		printf("vmThreadSleep(): sleep for %d!\n", tick);
 		tStore->sleepCurrentThread(tick);
 	}//both cases sleep the running process and immediately call the scheduler to swap a new process in
 	
-		return VM_STATUS_SUCCESS;
-	}
+	MachineResumeSignals(&sigState);
+	return VM_STATUS_SUCCESS;
+}
 
 TVMStatus VMStart(int tickms, int machinetickms, int argc, char* argv[]){
 
@@ -264,7 +416,6 @@ TVMStatus VMStart(int tickms, int machinetickms, int argc, char* argv[]){
 
 	ThreadStore* tStore = ThreadStore::getInstance();
 	tStore->createMainThread();	//mainThread is ID 1
-	printf("\nCreated Main Thread with TID: %d\n", tStore->getCurrentThread()->getThreadID());
 	tStore->createIdleThread();	//idleThread is ID 2
 
 	//request alarm every tickms USECONDS. alarm callback is schedule(high priority)
@@ -272,23 +423,17 @@ TVMStatus VMStart(int tickms, int machinetickms, int argc, char* argv[]){
 	MachineRequestAlarm(1000*tickms, (TMachineAlarmCallback)&timerInterrupt, (void*)&defaultSchedulerPriority);	
 	TVMMainEntry VMMain = VMLoadModule(module);							//load the module, save the VMMain function reference
 	
-//	testThreadCreate();
-	
 	if(VMMain != NULL){													//if VMMain is a valid reference,
 		VMMain(argc, argv);												//run the loaded module,
 		VMUnloadModule();													//then unload the module
 		delete tStore;														//delete unnecessary container
 		MachineTerminate();
-		printf("\nsuccess!");
 		return VM_STATUS_SUCCESS;
 	}
 	else{																				//if VMMain is null, the module failed to load
 		VMUnloadModule();													//unload the module and return error status
 		MachineTerminate();
-		printf("\nVM failed");
 		return VM_STATUS_FAILURE;
 	}
-//	return VM_STATUS_SUCCESS;
 }
-
 }

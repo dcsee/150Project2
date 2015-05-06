@@ -1,32 +1,54 @@
-//write VMThreadCreate
-//transform the tick callback into a simple scheduler
-
-
 #include "Machine.h"
-#include <queue>
 #include <list>
+#include <vector>
 
 class ThreadStore;
+class TCB;
+class Mutex;
+
+typedef struct{
+	Mutex *mutex;
+	bool waiting;
+}	MutexInfo;
 
 extern "C"{
 
 //Don't remove or comment out	==================================================================
-//typedef void (*TVMMainEntry)(int, char*[]); //These are definitions for VirtualMachineUtils.c
 TVMMainEntry VMLoadModule(const char* module); //They are implemented using Professor Nitta's provided source code in VirtualMachineUtils.c
 void VMUnloadModule(void);
-//TVMStatus VMFilePrint(int filedescriptor, const char *format, ...);
 //===============================================================================================
 
 void safeEntry(void *param);
 void timerInterrupt(void *calldata);	//accepts a VM_THREAD_PRIORITY
-void machineFileWriteCallback(void *data, int result);
-void machineFileOpenCallback(void* calledParam, int returnedFileDescriptor);
-void machineFileCloseCallback(void* calledParam, int result);
-void machineFileReadCallback(void* calledParam, int result);
-void machineFileSeekCallback(void* calledParam, int result);
 void idle(void* parm1);
-void dummyReturn(void* p);
+void machineFileIOCallback(void* calledParam, int result);
 }
+
+#ifndef MUTEX_H
+#define MUTEX_H
+
+class Mutex{
+	
+	public:
+		
+		Mutex();
+		~Mutex();
+		TCB* getOwner();
+		bool isDeleted();
+		TVMMutexID getID();
+		void deleteFromVM();
+		void lock(TCB* thread, TVMTick tick);
+		void release();
+
+	private:
+		TVMMutexID id;
+		bool deleted;
+		TCB *owner;	
+		std::list<TCB*>* priorityLists[3];
+};
+
+#endif
+
 
 #ifndef TCB_H
 #define TCB_H
@@ -41,55 +63,43 @@ class TCB{
 		void sleep(TVMTick tick);
 		TVMThreadState getState();
 		void setState(TVMThreadState state);
+		void addMutex(Mutex *m, bool w);
+		void setWaitingOnMutex(bool waiting);
+		Mutex* getWaitingMutex();					//returns the tail of the mutexInfo list
+		void removeMutex(Mutex *m);				//remove specified mutex from list
+		bool isWaitingOnMutex();					//returns if TCB is waiting on last added mutex
+		Mutex* getMutex();
 		TVMTick getTicksToSleep();
 		void decrementTicksToSleep();
-		void setFileWriteResult(int result);
-		int getFileWriteResult();
-		void setFileOpenResult(int result);
-		int getFileOpenResult();
-		void setFileCloseResult(int result);
-		int getFileCloseResult();
-		void setFileReadResult(int result);
-		int getFileReadResult();
-		void setFileSeekResult(int result);
-		int getFileSeekResult();
+		void setFileIOResult(int result);
+		int getFileIOResult();	
 		bool isWaitingOnIO();
 		void setIsWaitingOnIO(bool waiting);
+		bool isDeleted();
+		void setIsDeleted(bool d);
 		TVMThreadEntry getEntryFunction();
 		SMachineContextRef contextRef;
 		void releaseMutexes();
 
 	private:
-		
-		TVMThreadEntry safeEntryFunction;
-		int fileSeekResult;
-		int fileWriteResult;
-		int fileReadResult;
-		int fileOpenResult;
-		int fileCloseResult;
+		TVMThreadEntry safeEntryFunction;		
+		int fileIOResult;
 		int** safeEntryParam;
 		TVMThreadID threadID;
 		TVMThreadPriority priority;
 		TVMThreadState state;
 		TVMThreadEntry entryFunction;
+		bool deleted;
 		void* entryParam;
 		void* stackBaseAddress;
 		TVMMemorySize stackSize;
 		TVMTick ticksToSleep;						//how many ticks to sleep the thread before awaking it
 		bool waitingOnIO;
-		//a mutex, when I get to that point
+		std::list<MutexInfo*> *mutexes;
 };
 
 #endif
 
-//Add Mutex class here
-//	HAS TCB* to current owner
-//	HAS value
-//	ThreadStore - HAS list of mutexes? Otherwise may need a mutexStore (not doing that)
-//
-//For ThreadStore class - may need a switchToThreadByID method. Should be a simple change from current switching function,
-//just change the call signature and add some logic to schedule()
-//Test the new switcing logic in hello.so first 
 
 
 #ifndef THREADSTORE_H
@@ -100,7 +110,11 @@ class ThreadStore{
 	public:
 		static ThreadStore *getInstance();
 		~ThreadStore();
-		void insert(TCB* tcb);
+		int getNumMutexes();
+		Mutex* findMutexByID(TVMMutexID mutexID);
+		void insert(Mutex *mutex);
+		void insert(TCB *tcb);
+		void scheduleThreadEarly(TCB* thread);
 		int getNumThreads();
 		void createIdleThread();
 		void createMainThread();
@@ -114,6 +128,7 @@ class ThreadStore{
 		bool isThreadPrioInRange(TCB*);	//debug, remove
 		void switchToNewThread(TCB* thread);
 		void waitCurrentThreadOnIO();
+		void removeFromWaitlistEarly(TCB *thread);
 		void terminate(TCB* thread);
 		void terminateCurrentThread();
 		void deleteDeadThread(TCB* thread);
@@ -123,12 +138,15 @@ class ThreadStore{
 //		void swapOutCurrentThread(TVMThreadID index);
 		static ThreadStore *DUniqueInstance;
 		TVMThreadID numThreads;
+		TVMMutexID numMutexes;
 		TCB* idleThread;
 		TCB* currentThread;
 		TVMThreadID idleThreadID;
 		std::list<TCB*>* readyLists[4];
 		std::list<TCB*> *waitList;
 		std::list<TCB*> *deadList;
+		std::vector<TCB*> *allThreads;
+		std::vector<Mutex*> *mutexVector;
 };
 
 #endif
